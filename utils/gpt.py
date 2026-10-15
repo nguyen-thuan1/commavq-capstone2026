@@ -41,11 +41,19 @@ class GPTConfig:
     return self.dim // self.n_head
 
 class KVCache(nn.Module):
-  def __init__(self, max_batch_size, max_seq_length, n_heads, head_dim, dtype=torch.bfloat16):
+  def __init__(
+    self,
+    max_batch_size,
+    max_seq_length,
+    n_heads,
+    head_dim,
+    dtype=torch.bfloat16,
+    device=None,
+  ):
     super().__init__()
     cache_shape = (max_batch_size, n_heads, max_seq_length, head_dim)
-    self.register_buffer('k_cache', torch.zeros(cache_shape, dtype=dtype))
-    self.register_buffer('v_cache', torch.zeros(cache_shape, dtype=dtype))
+    self.register_buffer('k_cache', torch.zeros(cache_shape, dtype=dtype, device=device))
+    self.register_buffer('v_cache', torch.zeros(cache_shape, dtype=dtype, device=device))
 
   def update(self, input_pos, k_val, v_val):
     assert input_pos.shape[0] == k_val.shape[2]
@@ -131,8 +139,17 @@ class GPT(nn.Module):
     max_seq_length = find_multiple(max_seq_length, 8)
     self.max_seq_length = max_seq_length
     self.max_batch_size = max_batch_size
+    cache_dtype = self.transformer.wte.weight.dtype
+    cache_device = self.transformer.wte.weight.device
     for b in self.transformer.h:
-      b.attn.kv_cache = KVCache(max_batch_size, max_seq_length, self.config.n_head, self.config.head_dim)
+      b.attn.kv_cache = KVCache(
+        max_batch_size,
+        max_seq_length,
+        self.config.n_head,
+        self.config.head_dim,
+        dtype=cache_dtype,
+        device=cache_device,
+      )
 
     self.causal_mask = torch.tril(torch.ones(self.max_seq_length, self.max_seq_length, dtype=torch.bool)).view(1, 1, self.max_seq_length, self.max_seq_length)
 
